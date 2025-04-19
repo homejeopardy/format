@@ -2,31 +2,21 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>PDF Script Parser</title>
+  <title>AI Script Parser</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
   <style>
-    body {
-      font-family: monospace;
-      padding: 2rem;
-      background: #f4f4f4;
-    }
-    input[type="file"] {
-      margin-bottom: 1rem;
-    }
+    body { font-family: monospace; background: #f4f4f4; padding: 2rem; }
+    input[type="file"] { margin-bottom: 1rem; }
     pre {
-      background: #111;
-      color: #0f0;
-      padding: 1rem;
-      border-radius: 5px;
-      white-space: pre-wrap;
-      overflow-x: auto;
+      background: #111; color: #0f0; padding: 1rem;
+      border-radius: 5px; white-space: pre-wrap; overflow-x: auto;
     }
   </style>
 </head>
 <body>
-  <h1>PDF Script to JavaScript Object Converter</h1>
+  <h1>AI-Enhanced PDF Script Parser</h1>
   <input type="file" id="fileInput" accept=".pdf">
-  <pre id="output">// Upload a PDF script...</pre>
+  <pre id="output">// Upload a PDF script file...</pre>
 
   <script>
     document.getElementById("fileInput").addEventListener("change", async function (event) {
@@ -41,32 +31,54 @@
 
         for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
           const page = await pdf.getPage(pageNum);
-          const textContent = await page.getTextContent();
-          const pageText = textContent.items.map(item => item.str).join("\n");
+          const content = await page.getTextContent();
+          const pageText = content.items.map(item => item.str).join("\n");
           fullText += pageText + "\n";
         }
 
-        const lines = fullText.split(/\r?\n/);
-        const output = [];
-        let currentCharacter = "";
+        const rawLines = fullText.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+        const script = [];
+        let currentCharacter = null;
+        let buffer = [];
 
-        for (let i = 0; i < lines.length; i++) {
-          const line = lines[i].trim();
-          if (!line) continue;
+        const isCharacter = line =>
+          /^[A-Z][A-Z\s.'\-]+$/.test(line) &&
+          !line.includes(':') &&
+          line.length < 40;
 
-          if (/^[A-Z\s.'\-]+$/.test(line) && !line.includes(":")) {
+        const isCue = line =>
+          /^[\(\[].+[\)\]]$/.test(line) ||
+          /^[A-Z][a-z]+/.test(line) || 
+          line.startsWith("Scene") || 
+          line.startsWith("ACT");
+
+        const flushBuffer = () => {
+          if (buffer.length && currentCharacter) {
+            script.push({
+              character: currentCharacter,
+              line: buffer.join(" ").replace(/\s+/g, " ")
+            });
+            buffer = [];
+          }
+        };
+
+        for (let line of rawLines) {
+          if (isCharacter(line)) {
+            flushBuffer();
             currentCharacter = line;
-          } else if (currentCharacter) {
-            output.push({ character: currentCharacter, line });
-            currentCharacter = "";
+          } else if (isCue(line)) {
+            flushBuffer();
+            script.push({ character: "cue", line: line });
+            currentCharacter = null;
           } else {
-            output.push({ character: "cue", line });
+            buffer.push(line);
           }
         }
+        flushBuffer(); // for last block
 
-        const formatted = output.map(obj => {
-          return `{ character: "${obj.character}", line: "${obj.line.replace(/"/g, '\\"')}" },`;
-        }).join("\n");
+        const formatted = script.map(obj =>
+          `{ character: "${obj.character}", line: "${obj.line.replace(/"/g, '\\"')}" },`
+        ).join("\n");
 
         document.getElementById("output").textContent = formatted;
       };
