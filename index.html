@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>PDF Script Parser</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+  <style>
+    body {
+      font-family: monospace;
+      padding: 2rem;
+      background: #f4f4f4;
+    }
+    input[type="file"] {
+      margin-bottom: 1rem;
+    }
+    pre {
+      background: #111;
+      color: #0f0;
+      padding: 1rem;
+      border-radius: 5px;
+      white-space: pre-wrap;
+      overflow-x: auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>PDF Script to JavaScript Object Converter</h1>
+  <input type="file" id="fileInput" accept=".pdf">
+  <pre id="output">// Upload a PDF script...</pre>
+
+  <script>
+    document.getElementById("fileInput").addEventListener("change", async function (event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = async function () {
+        const typedArray = new Uint8Array(reader.result);
+        const pdf = await pdfjsLib.getDocument({ data: typedArray }).promise;
+        let fullText = "";
+
+        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+          const page = await pdf.getPage(pageNum);
+          const textContent = await page.getTextContent();
+          const pageText = textContent.items.map(item => item.str).join("\n");
+          fullText += pageText + "\n";
+        }
+
+        const lines = fullText.split(/\r?\n/);
+        const output = [];
+        let currentCharacter = "";
+
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line) continue;
+
+          if (/^[A-Z\s.'\-]+$/.test(line) && !line.includes(":")) {
+            currentCharacter = line;
+          } else if (currentCharacter) {
+            output.push({ character: currentCharacter, line });
+            currentCharacter = "";
+          } else {
+            output.push({ character: "cue", line });
+          }
+        }
+
+        const formatted = output.map(obj => {
+          return `{ character: "${obj.character}", line: "${obj.line.replace(/"/g, '\\"')}" },`;
+        }).join("\n");
+
+        document.getElementById("output").textContent = formatted;
+      };
+
+      reader.readAsArrayBuffer(file);
+    });
+  </script>
+</body>
+</html>
